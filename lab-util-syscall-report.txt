@@ -1,0 +1,33 @@
+一、错误与故障排除：在执行本实验的过程中，我遇到了几个错误，这些错误让我深入了解了xv6内核与用户空间之间的交互方式。
+1.编写完 sleep.c 和 pingpong.c 之后，xv6 shell编译报错。
+错误：我在Makefile的UPROGS中某行的反斜杠后多打了一个空格，导致后续行被忽略。
+解决方案：删除此空格，确保UPROGS已正确更新，然后执行“make clean”操作以强制重建文件系统镜像。
+2.make qemu 之后输入 pingpong，程序陷入死循环。
+错误：子进程和父进程都是先读再写，这导致两个进程都进入睡眠状态，等待对方写入，构成死锁。
+解决方案：子进程先读再写，父进程先写再读。另外，父进程写完之后写wait(0)，再读，防止父进程写完 p[1] 立即去读 (p[0])，使得父进程写进去的数据被自己读回来，而子进程永远卡在 read 上。
+3.在完成trace的任务后，控制台显示了每个进程（如init和sh）的跟踪消息。
+错误：没有检查trace_mask就直接printf，同时trace_mask未初始化。
+解决方案：在输出前进行位运算检查：if ((p->trace_mask >> num) & 1)，同时在allocproc()函数中对新进程的trace_mask初始化为0，从而避免从回收的进程数组中继承脏数据。
+4.完成sysinfo的任务后，测试时报错如下：
+== Test sysinfotest == Timeout! sysinfotest: FAIL (30.2s) 
+    ...
+         sysinfotest: start
+         scause 0x000000000000000f
+         sepc=0x00000000800023a8 stval=0x0000000000003fa0
+         panic: kerneltrap
+         qemu-system-riscv64: terminating on signal 15 from pid 76476 (make)
+    MISSING '^sysinfotest: OK'
+    QEMU output saved to xv6.out.sysinfotest
+错误：直接解引用用户指针，即在kernal/sysproc.c的sysinfo函数中直接*user_ptr = info。错误发生是因为内核地址空间和用户地址空间是隔离的，用户传来的地址在内核看来可能是无效的，甚至指向内核自己的数据。
+解决方案：改成copyout(p->pagetable, addr, (char *)&info, sizeof(info))，这样才能把sysinfo结构体正确复制回用户空间。
+5.检查count_freemem函数时看kernal/kalloc.c代码，发现其他函数都是在写了acquire(&kmem.lock)之后才进行操作，操作完成之后写release(&kmem.lock);
+错误：实现count_freemem函数时忘记加锁，导致内核可能会尝试访问一个非法的内存地址，触发 Page Fault（尽管不加锁也能通过全部测试点）
+解决方案：加锁。
+
+二、优化
+1.用户空间的防御性编程
+在sleep任务中，我调用sleep(time)前会对系统调用的返回值进行检查：if (sleep(time) != 0) { fprintf(2, "error..."); exit(1); }，提高代码的健壮性。
+2.利用阻塞机制实现进程同步
+在pingpong任务中，我了解到进程的执行顺序并不确定。在遇到一系列问题之后，我利用read()的阻塞特性来同步子进程和父进程：子进程会自动等待，直到父进程将数据写入管道，从而确保无论调度器先运行哪个进程，都能完成pingpong任务。
+3.对系统调用链路进行模块化构建
+实现 trace 和 sysinfo 需要打通从用户态到内核态的长路径，在任务中应该采用分层对接的方式：先通过修改 user.h 和 usys.pl 自动生成汇编代码，然后在 syscall.c 中建立系统调用号与内核函数的映射，接着将具体的业务逻辑（如掩码设置、数据统计）放在 sysproc.c 或 kalloc.c 中，保持 syscall.c 仅作为分发层。这种分层结构可以为用户态和内核态之间搭建一座安全、标准且透明的桥梁。
