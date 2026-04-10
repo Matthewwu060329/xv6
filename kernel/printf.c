@@ -133,3 +133,16 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void 
+backtrace(void)
+{
+  uint64 fp = r_fp();
+  uint64 top = PGROUNDUP(fp);
+  uint64 bottom = PGROUNDDOWN(fp);
+  while (fp < top && fp >= bottom) {
+    uint64 ra = *(uint64 *)(fp - 8);  // return address
+    printf("%p\n", ra);
+    fp = *(uint64*)(fp - 16);  // update frame pointer
+  }
+}

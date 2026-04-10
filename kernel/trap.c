@@ -77,8 +77,18 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    if(p->alarm_interval > 0) {  // 只有在设置了报警间隔（>0）的情况下才处理
+      p->alarm_ticks++;
+      if(p->alarm_ticks >= p->alarm_interval && p->is_alarming == 0) {  // 如果达到了间隔，且当前没有正在执行报警处理函数（防止重入）
+        p->is_alarming = 1;
+        memmove(p->alarm_tf, p->trapframe, sizeof(struct trapframe));
+        p->trapframe->epc = p->alarm_handler;
+        p->alarm_ticks = 0;
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }

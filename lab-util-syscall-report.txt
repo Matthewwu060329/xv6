@@ -1,3 +1,4 @@
+Lab1 Report : Util and Syscall
 一、错误与故障排除：在执行本实验的过程中，我遇到了几个错误，这些错误让我深入了解了xv6内核与用户空间之间的交互方式。
 1.编写完 sleep.c 和 pingpong.c 之后，xv6 shell编译报错。
 错误：我在Makefile的UPROGS中某行的反斜杠后多打了一个空格，导致后续行被忽略。

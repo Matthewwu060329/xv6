@@ -106,4 +106,11 @@ struct proc {
   char name[16];               // Process name (debugging)
   
   int trace_mask;
+
+  int alarm_interval;          // 0 indicates disabled
+  uint64 alarm_handler;        // Address of the alarm handling function
+  int alarm_ticks;             // The number of ticks that have elapsed since the last alarm
+  struct trapframe *alarm_tf;  /* A register image used to store the moment when an alarm was triggered. 
+  When sigreturn is called, the context needs to be restored from here */
+  int is_alarming;
 };
